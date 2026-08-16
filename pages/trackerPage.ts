@@ -22,7 +22,11 @@ export class TrackerPage {
 
   async selectState(name: string) {
     await this.page.selectOption('select.data-filter-input', { label: name });
-    await this.page.waitForTimeout(1800); // charts need a moment to re-render
+    // wait for the actual data to show up instead of a blind timeout - a fixed wait
+    // isn't always long enough on a slower network and was causing reads of an empty
+    // page (summary values coming back undefined) before the site had finished rendering
+    await this.page.locator('.resultCard').waitFor({ state: 'visible', timeout: 15000 });
+    await this.page.waitForTimeout(300); // small settle buffer for the charts to finish painting
   }
 
   async hasResultCard() {

@@ -4,4 +4,4 @@ test-results/
 playwright-report/
 .idea/
 .vscode/
-~$*.xlsx
+~$*
