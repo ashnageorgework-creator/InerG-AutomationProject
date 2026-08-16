@@ -199,7 +199,7 @@ export class TrackerPage {
     await this.hoverChart(chartIndex);
     const chart = this.page.locator('.js-plotly-plot').nth(chartIndex);
     await chart.locator(`a.modebar-btn[data-title="${title}"]`).click();
-    await this.page.waitForTimeout(400);
+    await this.page.waitForTimeout(600); // bumped from 400ms - firefox needs a bit more settle time here
   }
 
   async downloadChartPng(chartIndex: number, savePath: string) {
@@ -222,6 +222,9 @@ export class TrackerPage {
 
   async dragOnLineChart(fromOffset: { x: number; y: number }, toOffset: { x: number; y: number }) {
     const chart = this.page.locator('.js-plotly-plot').nth(1);
+    // make sure the chart is actually settled and visible before asking for its box - on firefox,
+    // asking for boundingBox() right after a previous interaction (still mid-reflow) could hang
+    await chart.waitFor({ state: 'visible', timeout: 10000 });
     const box = await chart.boundingBox();
     if (!box) throw new Error('line chart has no bounding box, cant drag on it');
 
@@ -234,7 +237,7 @@ export class TrackerPage {
     await this.page.mouse.down();
     await this.page.mouse.move(endX, endY, { steps: 10 });
     await this.page.mouse.up();
-    await this.page.waitForTimeout(400);
+    await this.page.waitForTimeout(500);
   }
 
   async getLinePointOpacities() {
@@ -248,13 +251,27 @@ export class TrackerPage {
   }
 
   async clickMapZoomIn() {
+    const before = await this.getMapZoomLevel();
     await this.page.locator('.leaflet-control-zoom-in').click();
-    await this.page.waitForTimeout(800);
+    await this.waitForMapZoomChange(before);
   }
 
   async clickMapZoomOut() {
+    const before = await this.getMapZoomLevel();
     await this.page.locator('.leaflet-control-zoom-out').click();
-    await this.page.waitForTimeout(800);
+    await this.waitForMapZoomChange(before);
+  }
+
+  // map tiles load over the network, so a fixed wait isn't reliable - poll for the tile
+  // url's zoom digit to actually change instead of just hoping 800ms was enough
+  async waitForMapZoomChange(previousZoom: number | null) {
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline) {
+      const current = await this.getMapZoomLevel();
+      if (current !== previousZoom) return;
+      await this.page.waitForTimeout(150);
+    }
+    // didn't change within the deadline - fall through and let the test's own assertion report it
   }
 
   async getMapZoomLevel() {
